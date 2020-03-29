@@ -1,3 +1,16 @@
+# credentials is local .py with one line: google_api_key = '<your_api_key>'
+# You need to request a googlemaps api key to use this.
+from credentials import google_api_key
+import googlemaps
+gmaps = googlemaps.Client(key=google_api_key)
+
+import shapely
+import numpy as np
+import networkx as nx
+
+highways = ['Interstate', 'Ramp', 'Other Freeway or Expressway', ]
+highway_types = ['RAMP', 'HW']
+
 def shapely_to_polyline(shapely_coords):
     list_of_coords = list(shapely_coords.coords)
     return [(x[1],x[0]) for x in list_of_coords]
@@ -34,23 +47,23 @@ def sinuosity(coords):
     except:
         return None
     
-def add_edge_to_graph(row):
+def add_edge_to_graph(row, dG):
+    updated_graph = dG
     shapely_coords = row.geometry
     if type(shapely_coords) == shapely.geometry.multilinestring.MultiLineString:
         return
     list_of_coords = list(shapely_coords.coords)
     list_of_coords = [(x[1],x[0]) for x in list_of_coords]
-    dG.add_edge(*[list_of_coords[0]] + [list_of_coords[len(list_of_coords) - 1]], 
+    updated_graph.add_edge(*[list_of_coords[0]] + [list_of_coords[len(list_of_coords) - 1]], 
        name = row.Name, 
        distance = row.Miles * 1609.34, 
        id = row.name,
        weight = row.forward_weight)
-    dG.add_edge(*[list_of_coords[len(list_of_coords) - 1]] + [list_of_coords[0]], 
+    updated_graph.add_edge(*[list_of_coords[len(list_of_coords) - 1]] + [list_of_coords[0]], 
        name = row.Name, 
        distance = row.Miles * 1609.34, 
        id = row.name,
        weight = row.reverse_weight)
-    return(shapely_coords)
 
 
 def get_closest_node(coord, G):
@@ -82,7 +95,7 @@ def grade_cost(elevation, coords, distance_window, max_sinuosity):
         if d > 0:
             segment_sinuosity += sinuosity(coords[i:j])
         if d < distance_window:
-            segment_sinuosity += 400/(segment_distance + 100)
+            segment_sinuosity += 1000/(segment_distance + 100)
         else:
             segment_sinuosity = max_sinuosity
             
@@ -97,7 +110,7 @@ def grade_cost(elevation, coords, distance_window, max_sinuosity):
     return(cost)
 
 
-def update_costs(path, distance_window, max_sinuosity):
+def update_costs(path, distance_window, max_sinuosity, centerlines, dG):
     updates = 0
     for i in range(len(path) -1):
         idx = dG.get_edge_data(*path[i:i+2])['id']
@@ -123,6 +136,6 @@ def update_costs(path, distance_window, max_sinuosity):
         if row.reverse_weight != reverse_weight:
             updates +=1
             centerlines.loc[idx, 'reverse_weight'] = reverse_weight
-        add_edge_to_graph(centerlines.loc[idx])
-    return updates
+        add_edge_to_graph(centerlines.loc[idx], dG)
+    return centerlines, updates
     
